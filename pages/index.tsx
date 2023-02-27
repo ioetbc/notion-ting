@@ -1,109 +1,101 @@
-import { useEffect, useMemo } from "react";
+import React, { useCallback } from 'react';
+import ReactFlow, { addEdge, ConnectionLineType, useNodesState, useEdgesState } from 'reactflow';
+import dagre from 'dagre';
+import 'reactflow/dist/style.css';
 
-import ReactFlow, { Background, BackgroundVariant, Controls, MiniMap, Position } from "reactflow";
-import useStore from "../src/store";
-import { useRouter } from "next/router";
+import { nodes, edges } from '../src/nodes-edges';
 import styles from "./index.module.css";
-import TextUpdaterNode from "src/components/custom-node";
-import { Client } from "@notionhq/client";
 
 
-const nodeTypes = { textUpdater: TextUpdaterNode };
 
-// export async function getStaticProps() {
-  // const notion = new Client({ auth: process.env.NOTION_API_KEY });
+// import './index.css';
 
-  // const response = await notion.search({
-  //   filter: {
-  //     value: 'page',
-  //     property: 'object'
-  //   },
-  //   sort: {
-  //     direction: 'ascending',
-  //     timestamp: 'last_edited_time'
-  //   },
-  // })
-  // const notionData = response.results.map((page: any) => ({
-  //   id: page.id,
-  //   title: page?.properties?.title?.title[0].plain_text
-  // }))
-  // console.log(notionData)
-  // return { props: {notionData} };
-// }
+const dagreGraph = new dagre.graphlib.Graph();
+dagreGraph.setDefaultEdgeLabel(() => ({}));
+
+const nodeWidth = 172;
+const nodeHeight = 36;
+
+const getLayoutedElements = (nodes: any, edges: any, direction = 'TB') => {
+  const isHorizontal = direction === 'LR';
+  dagreGraph.setGraph({ rankdir: direction });
+
+
+  nodes.forEach((node: any) => {
+    dagreGraph.setNode(node.id, { width: nodeWidth, height: nodeHeight });
+  });
+
+  edges.forEach((edge: any) => {
+    dagreGraph.setEdge(edge.source, edge.target);
+  });
+
+  dagre.layout(dagreGraph);
+
+  nodes.forEach((node: any) => {
+    const nodeWithPosition = dagreGraph.node(node.id);
+    node.targetPosition = isHorizontal ? 'left' : 'top';
+    node.sourcePosition = isHorizontal ? 'right' : 'bottom';
+
+    // We are shifting the dagre node position (anchor=center center) to the top left
+    // so it matches the React Flow node anchor point (top left).
+    node.position = {
+      x: nodeWithPosition.x - nodeWidth / 2,
+      y: nodeWithPosition.y - nodeHeight / 2,
+    };
+
+    return node;
+  });
+
+  return { nodes, edges };
+};
+
+const { nodes: layoutedNodes, edges: layoutedEdges } = getLayoutedElements(
+  nodes,
+  edges
+);
 
 export default function Index() {
-  // The store is defined in src/store.ts
-  const {
-    liveblocks: { enterRoom, leaveRoom, isStorageLoading },
-    nodes,
-    edges,
-    onNodesChange,
-    onEdgesChange,
-    onConnect,
-  } = useStore();
+  const [nodes, setNodes, onNodesChange] = useNodesState(layoutedNodes);
+  const [edges, setEdges, onEdgesChange] = useEdgesState(layoutedEdges);
 
-  const roomId = useOverrideRoomId("nextjs-flow-chart");
+  const onConnect = useCallback(
+    (params: any) =>
+      setEdges((eds) =>
+        addEdge({ ...params, type: ConnectionLineType.SmoothStep, animated: true }, eds)
+      ),
+    []
+  );
+  const onLayout = useCallback(
+    (direction: any) => {
+      const { nodes: layoutedNodes, edges: layoutedEdges } = getLayoutedElements(
+        nodes,
+        edges,
+        direction
+      );
 
-  // Enter the Liveblocks room on load
-  useEffect(() => {
-    enterRoom(roomId);
-    return () => leaveRoom(roomId);
-  }, [enterRoom, leaveRoom]);
+      setNodes([...layoutedNodes]);
+      setEdges([...layoutedEdges]);
+    },
+    [nodes, edges]
+  );
 
-  if (isStorageLoading) {
-    return (
-      <div className={styles.container}>
-        <div className={styles.loading}>
-          <img src="https://liveblocks.io/loading.svg" alt="Loading" />
-        </div>
-      </div>
-    );
-  }
+    console.log('hmmm nodes', nodes)
 
   return (
     <div className={styles.wrapper}>
       <ReactFlow
-      nodes={nodes}
-//         nodes={[
-//   { id: 'node-1', type: 'textUpdater', position: { x: 0, y: 0 }, data: { value: 123 } },
-//   {
-//     id: 'node-2',
-//     type: 'output',
-//     targetPosition: Position.Top,
-//     position: { x: 0, y: 200 },
-//     data: { label: 'node 2' },
-//   },
-//   {
-//     id: 'node-3',
-//     type: 'output',
-//  targetPosition: Position.Top,
-//     position: { x: 200, y: 200 },
-//     data: { label: 'node 3' },
-//   },
-// ]}
+        nodes={nodes}
         edges={edges}
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
         onConnect={onConnect}
+        connectionLineType={ConnectionLineType.SmoothStep}
         fitView
-        nodeTypes={nodeTypes}
-      >
-        <MiniMap pannable zoomable />
-        <Controls />
-        <Background variant={BackgroundVariant.Cross} />
-      </ReactFlow>
+      />
+      <div className="controls">
+        <button onClick={() => onLayout('TB')}>vertical layout</button>
+        <button onClick={() => onLayout('LR')}>horizontal layout</button>
+      </div>
     </div>
   );
-}
-/**
- * This function is used when deploying an example on liveblocks.io.
- * You can ignore it completely if you run the example locally.
- */
-function useOverrideRoomId(roomId: string) {
-  const { query } = useRouter();
-  const overrideRoomId = useMemo(() => {
-    return query?.roomId ? `${roomId}-${query.roomId}` : roomId;
-  }, [query, roomId]);
-
-  return overrideRoomId;
-}
+};

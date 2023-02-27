@@ -15,8 +15,9 @@ import {
 import { createClient, EnsureJson } from "@liveblocks/client";
 import { liveblocks } from "@liveblocks/zustand";
 import type { WithLiveblocks } from "@liveblocks/zustand";
-import {Nodes} from "./nodes";
-import edges from "./edges";
+import {initialNodes, initialEdges} from "./nodes-edges";
+// import edges from "./edges";
+import { Client } from "@notionhq/client";
 
 const client = createClient({
   publicApiKey: process.env.NEXT_PUBLIC_LIVEBLOCKS_PUBLIC_KEY as string,
@@ -36,15 +37,13 @@ type Storage = {
   edges: FlowState["edges"];
 };
 
-const hmm = Nodes()
-
 // Define your fully-typed Zustand store
 const useStore = create<WithLiveblocks<FlowState, {}, EnsureJson<Storage>>>()(
   liveblocks(
     (set, get) => ({
       // Initial values for nodes and edges
-      nodes: hmm,
-      edges,
+      nodes: initialNodes,
+      edges: initialEdges,
 
       // Apply changes to React Flow when the flowchart is interacted with
       onNodesChange: (changes: NodeChange[]) => {
@@ -68,10 +67,10 @@ const useStore = create<WithLiveblocks<FlowState, {}, EnsureJson<Storage>>>()(
       client,
 
       // Define the store properties that should be shared in real-time
-      storageMapping: {
-        // nodes: true,
-        // edges: true,
-      },
+      // storageMapping: {
+      //   nodes: true,
+      //   edges: true,
+      // },
     }
   )
 );
